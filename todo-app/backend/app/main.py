@@ -65,6 +65,18 @@ def toggle_todo(todo_id: int, db: Session = Depends(get_db)):
     return updated
 
 
+@app.delete("/todos/completed")
+def delete_completed(db: Session = Depends(get_db)):
+    count = crud.clear_completed(db)
+    return {"deleted": count}
+
+
+@app.delete("/todos")
+def delete_all(db: Session = Depends(get_db)):
+    count = crud.clear_all(db)
+    return {"deleted": count}
+
+
 @app.delete("/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     todo = crud.get_todo(db, todo_id)
@@ -72,15 +84,3 @@ def delete_todo(todo_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Todo not found")
     crud.delete_todo(db, todo)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@app.delete("/todos/completed")
-def delete_completed(db: Session = Depends(get_db)):
-    count = crud.clear_completed(db)
-    return JSONResponse(content={"deleted": count})
-
-
-@app.delete("/todos")
-def delete_all(db: Session = Depends(get_db)):
-    count = crud.clear_all(db)
-    return JSONResponse(content={"deleted": count})
