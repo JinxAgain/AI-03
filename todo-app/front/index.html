@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>待办事项应用 | Todo App</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="preconnect" href="https://unpkg.com" />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- React + ReactDOM + Babel (development) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Boot: allow override API base via ?api=... -->
+    <script>
+      (function () {
+        try {
+          const url = new URL(window.location.href);
+          const api = url.searchParams.get('api');
+          if (api) {
+            window.API_BASE = api;
+          }
+        } catch (_) {}
+      })();
+    </script>
+
+    <script type="text/babel">
+      const { useEffect, useMemo, useState } = React;
+
+      const API_BASE = window.API_BASE || 'http://127.0.0.1:8000';
+
+      async function api(path, options = {}) {
+        const res = await fetch(`${API_BASE}${path}`, {
+          headers: { 'Content-Type': 'application/json' },
+          ...options,
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`API ${res.status}: ${text}`);
+        }
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) return res.json();
+        return null;
+      }
+
+      function App() {
+        const [todos, setTodos] = useState([]);
+        const [title, setTitle] = useState('');
+        const [filter, setFilter] = useState('all'); // all | active | completed
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState('');
+
+        const filteredTodos = useMemo(() => todos, [todos]);
+
+        async function loadTodos(f = filter) {
+          setLoading(true);
+          setError('');
+          try {
+            const data = await api(`/todos?status=${encodeURIComponent(f)}`);
+            setTodos(data);
+          } catch (e) {
+            console.error(e);
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        useEffect(() => {
+          loadTodos(filter);
+        }, [filter]);
+
+        async function handleAdd(e) {
+          e.preventDefault();
+          const t = title.trim();
+          if (!t) return;
+          setLoading(true);
+          setError('');
+          try {
+            await api('/todos', {
+              method: 'POST',
+              body: JSON.stringify({ title: t }),
+            });
+            setTitle('');
+            await loadTodos(filter);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        async function handleToggle(id) {
+          setLoading(true);
+          setError('');
+          try {
+            await api(`/todos/${id}/toggle`, { method: 'POST' });
+            await loadTodos(filter);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        async function handleDelete(id) {
+          setLoading(true);
+          setError('');
+          try {
+            await api(`/todos/${id}`, { method: 'DELETE' });
+            await loadTodos(filter);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        async function handleClearCompleted() {
+          setLoading(true);
+          setError('');
+          try {
+            await api('/todos/completed', { method: 'DELETE' });
+            await loadTodos(filter);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        async function handleClearAll() {
+          if (!confirm('确认清除全部待办吗？')) return;
+          setLoading(true);
+          setError('');
+          try {
+            await api('/todos', { method: 'DELETE' });
+            await loadTodos(filter);
+          } catch (e) {
+            setError(e.message);
+          } finally {
+            setLoading(false);
+          }
+        }
+
+        return (
+          <div className="container">
+            <h1 className="title">待办事项</h1>
+
+            <form className="add-form" onSubmit={handleAdd}>
+              <input
+                className="input"
+                type="text"
+                placeholder="输入新的任务..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                disabled={loading}
+              />
+              <button className="btn primary" type="submit" disabled={loading}>
+                添加
+              </button>
+            </form>
+
+            <div className="filters">
+              <button
+                className={`chip ${filter === 'all' ? 'active' : ''}`}
+                onClick={() => setFilter('all')}
+                disabled={loading}
+              >
+                全部
+              </button>
+              <button
+                className={`chip ${filter === 'active' ? 'active' : ''}`}
+                onClick={() => setFilter('active')}
+                disabled={loading}
+              >
+                未完成
+              </button>
+              <button
+                className={`chip ${filter === 'completed' ? 'active' : ''}`}
+                onClick={() => setFilter('completed')}
+                disabled={loading}
+              >
+                已完成
+              </button>
+            </div>
+
+            {error && <div className="alert">{error}</div>}
+
+            <ul className="todo-list">
+              {filteredTodos.map((t) => (
+                <li key={t.id} className={`todo-item ${t.completed ? 'completed' : ''}`}>
+                  <span className="todo-title">{t.title}</span>
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      onClick={() => handleToggle(t.id)}
+                      disabled={loading}
+                      title="标记完成/未完成"
+                    >
+                      完成
+                    </button>
+                    <button
+                      className="btn danger"
+                      onClick={() => handleDelete(t.id)}
+                      disabled={loading}
+                      title="删除"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="footer-actions">
+              <button className="btn" onClick={handleClearCompleted} disabled={loading}>
+                清除已完成
+              </button>
+              <button className="btn danger" onClick={handleClearAll} disabled={loading}>
+                清除全部
+              </button>
+            </div>
+
+            <div className="status-line">
+              API: <code>{API_BASE}</code> | 状态: {loading ? '加载中...' : '就绪'}
+            </div>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
